@@ -12,7 +12,7 @@ function authenticate(req, res, next) {
     req.user = {
       id: payload.id,
       email: payload.email,
-      role: payload.role
+      role: payload.role,
       name: payload.name,
       sector_id: payload.sector_id ?? null,
       sector_key: payload.sector_key ?? null,
