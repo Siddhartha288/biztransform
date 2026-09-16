@@ -12,11 +12,13 @@ router.get(
     try {
       const rows = await query(
         `SELECT u.id, u.name, u.email, u.business_name, u.created_at,
+                s.label AS sector_label,
                 a.id AS assessment_id,
                 a.total_score,
                 a.level,
                 a.created_at AS assessment_date
          FROM users u
+         LEFT JOIN sectors s ON s.id = u.sector_id
          LEFT JOIN assessments a
            ON a.id = (
              SELECT a2.id
@@ -35,6 +37,7 @@ router.get(
           name: r.name,
           email: r.email,
           business_name: r.business_name,
+          sector_label: r.sector_label,
           created_at: r.created_at,
           latest_assessment: r.assessment_id
             ? {

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import api from '../api/client';
 
 export default function Register() {
   const { register, loading } = useAuth();
@@ -11,8 +12,26 @@ export default function Register() {
     password: '',
     role: 'business',
     business_name: '',
+    sector: '',
   });
+  const [sectors, setSectors] = useState([]);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get('/sectors');
+        if (!cancelled) setSectors(data.sectors || []);
+      } catch {
+        // Sector list is only needed for the dropdown; submit will still
+        // surface a clear error if sector ends up missing.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const update = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -23,6 +42,7 @@ export default function Register() {
       const user = await register({
         ...form,
         business_name: form.role === 'business' ? form.business_name : undefined,
+        sector: form.role === 'business' ? form.sector : undefined,
       });
       navigate(user.role === 'advisor' ? '/advisor' : '/assessment', { replace: true });
     } catch (err) {
@@ -96,17 +116,43 @@ export default function Register() {
         </fieldset>
 
         {form.role === 'business' && (
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-mono uppercase tracking-wide text-muted">
-              Business name
-            </span>
-            <input
-              value={form.business_name}
-              onChange={update('business_name')}
-              className="w-full rounded-xl border border-border bg-ink px-3 py-2.5 text-sm outline-none focus:border-amber"
-              placeholder="Optional"
-            />
-          </label>
+          <>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-mono uppercase tracking-wide text-muted">
+                Business name
+              </span>
+              <input
+                value={form.business_name}
+                onChange={update('business_name')}
+                className="w-full rounded-xl border border-border bg-ink px-3 py-2.5 text-sm outline-none focus:border-amber"
+                placeholder="Optional"
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-mono uppercase tracking-wide text-muted">
+                Business sector
+              </span>
+              <select
+                required
+                value={form.sector}
+                onChange={update('sector')}
+                className="w-full rounded-xl border border-border bg-ink px-3 py-2.5 text-sm outline-none focus:border-amber"
+              >
+                <option value="" disabled>
+                  Select your sector…
+                </option>
+                {sectors.map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-muted">
+                We tailor your assessment questions and roadmap to your sector.
+              </span>
+            </label>
+          </>
         )}
 
         <button

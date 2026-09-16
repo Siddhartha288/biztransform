@@ -1,5 +1,7 @@
 require('dotenv').config();
 
+const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
 
@@ -7,6 +9,7 @@ const authRoutes = require('./routes/auth');
 const assessmentRoutes = require('./routes/assessments');
 const roadmapRoutes = require('./routes/roadmap');
 const adminRoutes = require('./routes/admin');
+const sectorRoutes = require('./routes/sectors');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
@@ -32,6 +35,15 @@ app.use('/api/auth', authRoutes);
 app.use('/api', assessmentRoutes);
 app.use('/api/assessments', roadmapRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/sectors', sectorRoutes);
+
+const staticDir = path.join(__dirname, 'public');
+if (fs.existsSync(staticDir)) {
+  app.use(express.static(staticDir));
+  app.get(/^\/(?!api).*/, (req, res) => {
+    res.sendFile(path.join(staticDir, 'index.html'));
+  });
+}
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Not found' });

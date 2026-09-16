@@ -39,14 +39,23 @@ function buildCategoryBreakdown(questions, responsesByQuestion) {
   }));
 }
 
+async function resolveSectorId(user) {
+  if (user.sector_id) return user.sector_id;
+  const fallback = await query("SELECT id FROM sectors WHERE `key` = 'other' LIMIT 1");
+  return fallback.length ? fallback[0].id : null;
+}
+
 router.get('/questions', authenticate, async (req, res, next) => {
   try {
+    const sectorId = await resolveSectorId(req.user);
     const rows = await query(
       `SELECT q.id, q.text, q.sort_order, q.category_id,
               c.\`key\` AS category_key, c.label AS category_label
        FROM questions q
        JOIN categories c ON c.id = q.category_id
-       ORDER BY c.id ASC, q.sort_order ASC, q.id ASC`
+       WHERE q.sector_id = :sector_id
+       ORDER BY c.id ASC, q.sort_order ASC, q.id ASC`,
+      { sector_id: sectorId }
     );
 
     const grouped = [];
@@ -97,10 +106,13 @@ router.post('/assessments', authenticate, async (req, res, next) => {
       }
     }
 
+    const sectorId = await resolveSectorId(req.user);
     const questions = await query(
       `SELECT q.id, q.category_id, c.\`key\` AS category_key, c.label AS category_label
        FROM questions q
-       JOIN categories c ON c.id = q.category_id`
+       JOIN categories c ON c.id = q.category_id
+       WHERE q.sector_id = :sector_id`,
+      { sector_id: sectorId }
     );
 
     if (questions.length === 0) {
@@ -135,9 +147,9 @@ router.post('/assessments', authenticate, async (req, res, next) => {
     await connection.beginTransaction();
 
     const [assessmentResult] = await connection.execute(
-      `INSERT INTO assessments (user_id, total_score, level)
-       VALUES (?, ?, ?)`,
-      [req.user.id, totalScore, level]
+      `INSERT INTO assessments (user_id, sector_id, total_score, level)
+       VALUES (?, ?, ?, ?)`,
+      [req.user.id, sectorId, totalScore, level]
     );
     const assessmentId = assessmentResult.insertId;
 

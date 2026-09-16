@@ -1,48 +1,32 @@
 /**
- * Load schema.sql into MySQL.
- * Usage (from backend folder):
- *   node load-schema.js your_mysql_password
+ * Loads schema.sql (tables + categories/sectors seed) into the configured
+ * database, then seeds sector-specific questions. Reads DB connection info
+ * from .env (same as db.js) — the account only needs access to its own
+ * database, not CREATE DATABASE privileges.
+ *
+ * Usage (from backend folder): node load-schema.js
  */
+require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const mysql = require('mysql2/promise');
 
 async function main() {
-  const password = process.argv[2];
-  if (password === undefined) {
-    console.error('Usage: node load-schema.js your_mysql_password');
-    process.exit(1);
-  }
-
   const schemaPath = path.join(__dirname, 'schema.sql');
   const sql = fs.readFileSync(schemaPath, 'utf8');
 
   const connection = await mysql.createConnection({
-    host: 'localhost',
-    port: 3306,
-    user: 'root',
-    password,
+    host: process.env.DB_HOST || 'localhost',
+    port: Number(process.env.DB_PORT) || 3306,
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'digitalready',
     multipleStatements: true,
   });
 
   try {
-    await connection.query(
-      'CREATE DATABASE IF NOT EXISTS digitalready CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
-    );
-    await connection.query('USE digitalready');
     await connection.query(sql);
-
-    const [tables] = await connection.query('SHOW TABLES');
-    const [[{ questions }]] = await connection.query(
-      'SELECT COUNT(*) AS questions FROM questions'
-    );
-
     console.log('Schema loaded successfully.');
-    console.log(
-      'Tables:',
-      tables.map((t) => Object.values(t)[0]).join(', ')
-    );
-    console.log('Questions seeded:', questions);
   } finally {
     await connection.end();
   }

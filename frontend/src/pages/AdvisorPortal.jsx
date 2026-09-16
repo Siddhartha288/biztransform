@@ -71,6 +71,7 @@ export default function AdvisorPortal() {
             <thead className="border-b border-border bg-ink/40 font-mono text-xs uppercase tracking-wide text-muted">
               <tr>
                 <th className="px-4 py-3 font-medium">Business</th>
+                <th className="px-4 py-3 font-medium">Sector</th>
                 <th className="px-4 py-3 font-medium">Owner</th>
                 <th className="px-4 py-3 font-medium">Email</th>
                 <th className="px-4 py-3 font-medium">Score</th>
@@ -81,7 +82,7 @@ export default function AdvisorPortal() {
             <tbody>
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-muted">
+                  <td colSpan={7} className="px-4 py-10 text-center text-muted">
                     No business accounts yet.
                   </td>
                 </tr>
@@ -91,6 +92,7 @@ export default function AdvisorPortal() {
                   <td className="px-4 py-3 font-medium text-text">
                     {b.business_name || '—'}
                   </td>
+                  <td className="px-4 py-3 text-muted">{b.sector_label || '—'}</td>
                   <td className="px-4 py-3 text-muted">{b.name}</td>
                   <td className="px-4 py-3 text-muted">{b.email}</td>
                   <td className="px-4 py-3 font-mono text-amber">

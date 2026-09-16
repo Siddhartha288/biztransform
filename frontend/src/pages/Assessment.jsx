@@ -84,7 +84,9 @@ export default function Assessment() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
       <div className="mb-8 text-center">
-        <p className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-teal">15 questions</p>
+        <p className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-teal">
+          {flatQuestions.length} question{flatQuestions.length === 1 ? '' : 's'}
+        </p>
         <h1 className="font-display text-3xl font-bold">Digital maturity assessment</h1>
         <p className="mt-2 text-sm text-muted">Answer Yes or No — about 3 minutes.</p>
       </div>

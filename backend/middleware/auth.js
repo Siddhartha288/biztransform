@@ -14,6 +14,8 @@ function authenticate(req, res, next) {
       email: payload.email,
       role: payload.role,
       name: payload.name,
+      sector_id: payload.sector_id ?? null,
+      sector_key: payload.sector_key ?? null,
     };
     return next();
   } catch {

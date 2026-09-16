@@ -8,9 +8,11 @@ const router = express.Router({ mergeParams: true });
 async function loadAssessmentForUser(assessmentId, user) {
   const assessments = await query(
     `SELECT a.id, a.user_id, a.total_score, a.level, a.created_at,
-            u.business_name, u.name AS user_name
+            u.business_name, u.name AS user_name,
+            s.label AS sector_label
      FROM assessments a
      JOIN users u ON u.id = a.user_id
+     LEFT JOIN sectors s ON s.id = a.sector_id
      WHERE a.id = :id
      LIMIT 1`,
     { id: assessmentId }
@@ -96,7 +98,7 @@ router.post('/:id/roadmap', authenticate, async (req, res, next) => {
     }
 
     const responseRows = await query(
-      `SELECT r.answer, q.text AS question, c.label AS category,
+      `SELECT r.answer, q.text AS question, q.tip AS tip, c.label AS category,
               c.id AS category_id, c.\`key\` AS category_key,
               q.id AS question_id
        FROM responses r
@@ -132,11 +134,13 @@ router.post('/:id/roadmap', authenticate, async (req, res, next) => {
 
     const roadmap = await generateRoadmap({
       businessName: assessment.business_name || assessment.user_name,
+      sector: assessment.sector_label || null,
       totalScore: Number(assessment.total_score),
       level: assessment.level,
       categories,
       answers: responseRows.map((r) => ({
         question: r.question,
+        tip: r.tip,
         category: r.category,
         answer: r.answer,
       })),

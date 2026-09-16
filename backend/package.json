@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "dev": "node --watch server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "db:setup": "node load-schema.js && node seed-questions.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

@@ -31,6 +31,7 @@ async function generateRoadmap(assessmentData) {
 async function generateWithAnthropic(assessmentData, apiKey) {
   const {
     businessName,
+    sector,
     totalScore,
     level,
     categories,
@@ -53,7 +54,7 @@ async function generateWithAnthropic(assessmentData, apiKey) {
 
   const prompt = `You are a practical digital advisor for small businesses. Avoid generic fluff.
 
-Business: ${businessName || 'a small business'}
+Business: ${businessName || 'a small business'}${sector ? ` (sector: ${sector})` : ''}
 Overall digital maturity: ${totalScore}% — level "${level}"
 Weakest / focus areas: ${weakCategories || 'none clearly weak'}
 
@@ -80,6 +81,7 @@ Write a personalized action roadmap as JSON only (no markdown fences), with this
 Rules:
 - Include 3 to 5 prioritized actions (priority 1 = highest).
 - Each action must be specific and doable within 1-4 weeks.
+- Tailor suggestions and examples to the business's sector where relevant (tools, channels, workflows typical for that sector).
 - Prioritize weak categories first.
 - Reference their actual No answers where useful.
 - Every action's description must name at least one specific "No" answer from THIS business's
@@ -116,46 +118,10 @@ Rules:
   return parseRoadmapContent(text);
 }
 
-// Per-question, specific guidance - keyed by the exact question text from schema.sql.
-// This is what makes the local (non-AI) roadmap genuinely reflect the recorded answers
-// rather than giving the same paragraph to every business in a category regardless of
-// which specific questions were answered "No".
-const QUESTION_TIPS = {
-  'Do you have a mobile-friendly website that clearly explains what you offer?':
-    'Check your site on your own phone. If text is tiny or buttons are hard to tap, switch to a mobile-friendly template and rewrite the homepage to say what you sell in one sentence.',
-  'Can customers find your business on Google Maps or a local directory listing?':
-    'Claim your Google Business Profile (free), add your address, hours, and photos, and ask 3 recent customers for a review to help it show up in local search.',
-  'Do you update your online profiles (website or social) at least monthly?':
-    'Put a recurring 15-minute calendar reminder once a month to post one update, photo, or offer - consistency matters more than frequency.',
-  'Can customers pay you online (card, PayPal, Stripe, or similar)?':
-    'Sign up for a payment link tool (Stripe, PayPal, or Square) - most let you start accepting card payments same-day with no hardware.',
-  'Do you send digital invoices or receipts instead of paper-only?':
-    'Turn on digital invoicing in whatever payment tool you use, and send your next 5 invoices by email instead of paper.',
-  'Do you reconcile payments digitally (accounting software or spreadsheet)?':
-    'Start with a simple shared spreadsheet logging every payment in and out weekly - a full accounting tool can come later.',
-  'Do you use email or SMS to stay in touch with customers?':
-    'Collect emails or phone numbers at checkout (with permission) and send one short update or offer this month to test the channel.',
-  'Do you run any paid digital ads (Google, Meta, or similar)?':
-    'Start with a $5-10/day test on Meta or Google ads targeting your local area - most platforms let you pause anytime.',
-  'Do you collect customer reviews online and respond to them?':
-    'Ask your next 3 happy customers directly for a review, and reply to any existing reviews (good or bad) this week.',
-  'Do you use shared digital tools for scheduling, bookings, or task tracking?':
-    'Pick one free shared tool (Google Calendar, Trello, or similar) for bookings or tasks and move everything out of texts/paper this week.',
-  'Can your team access key business files from anywhere (cloud storage)?':
-    'Move your most-used files into a shared cloud folder (Google Drive or similar) and check everyone on the team has access from their phone.',
-  'Do you automate any routine tasks (reminders, order confirmations, etc.)?':
-    'Turn on automatic reminders or confirmations in whatever booking/payment tool you already use - most have this built in but switched off.',
-  'Do you track basic sales or customer metrics in a spreadsheet or dashboard?':
-    'Create one spreadsheet tracking weekly sales, new customers, and repeat customers - just 3 numbers is enough to start.',
-  'Do you review performance data at least monthly to guide decisions?':
-    'Block 20 minutes every Friday to look at last week\'s numbers and note one decision you will make because of them.',
-  'Do you store customer contact details securely in a digital system (CRM or list)?':
-    'Move customer contacts out of a notebook or scattered texts into one simple digital list or a free CRM tool.',
-};
-
 function buildLocalRoadmap(assessmentData) {
   const {
     businessName,
+    sector,
     totalScore,
     level,
     categories = [],
@@ -175,12 +141,13 @@ function buildLocalRoadmap(assessmentData) {
   };
 
   // Builds a description entirely from THIS business's actual "No" answers in a category,
-  // rather than a fixed paragraph that's the same regardless of which questions failed.
+  // using each question's sector-specific tip (from the DB) rather than a fixed paragraph
+  // that's the same regardless of which questions failed.
   function describeCategoryGaps(categoryLabel) {
     const noAnswers = answers.filter((a) => a.category === categoryLabel && a.answer === 0);
     if (noAnswers.length === 0) return null;
 
-    const tips = noAnswers.map((a) => QUESTION_TIPS[a.question] || a.question);
+    const tips = noAnswers.map((a) => a.tip || a.question);
     if (tips.length === 1) return tips[0];
     return tips.map((t, i) => `${i + 1}) ${t}`).join(' ');
   }
@@ -220,9 +187,10 @@ function buildLocalRoadmap(assessmentData) {
 
   const weakLabels = focus.map((c) => `${c.label} (${c.score}%)`).join(', ');
   const name = businessName || 'Your business';
+  const sectorPhrase = sector ? ` in the ${sector} sector` : '';
 
   return {
-    intro: `${name} is currently at “${level}” with an overall score of ${totalScore}%. The biggest opportunities are in ${weakLabels || 'a few core digital areas'}. Below is a practical 1–4 week plan you can start immediately.`,
+    intro: `${name}${sectorPhrase} is currently at “${level}” with an overall score of ${totalScore}%. The biggest opportunities are in ${weakLabels || 'a few core digital areas'}. Below is a practical 1–4 week plan you can start immediately.`,
     actions: actions.slice(0, 5),
   };
 }
