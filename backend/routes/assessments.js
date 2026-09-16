@@ -1,0 +1,252 @@
+const express = require('express');
+const { query, pool } = require('../db');
+const { authenticate } = require('../middleware/auth');
+
+const router = express.Router();
+
+function scoreToLevel(score) {
+  if (score >= 80) return 'Digital Ready';
+  if (score >= 60) return 'Digitally Growing';
+  if (score >= 40) return 'Getting Started';
+  return 'Foundation Needed';
+}
+
+function buildCategoryBreakdown(questions, responsesByQuestion) {
+  const byCategory = new Map();
+
+  for (const q of questions) {
+    if (!byCategory.has(q.category_id)) {
+      byCategory.set(q.category_id, {
+        category_id: q.category_id,
+        key: q.category_key,
+        label: q.category_label,
+        questionCount: 0,
+        yesCount: 0,
+      });
+    }
+    const cat = byCategory.get(q.category_id);
+    cat.questionCount += 1;
+    const answer = responsesByQuestion.get(q.id);
+    if (answer === 1) cat.yesCount += 1;
+  }
+
+  return Array.from(byCategory.values()).map((cat) => ({
+    ...cat,
+    score:
+      cat.questionCount === 0
+        ? 0
+        : Math.round((cat.yesCount / cat.questionCount) * 100),
+  }));
+}
+
+router.get('/questions', authenticate, async (req, res, next) => {
+  try {
+    const rows = await query(
+      `SELECT q.id, q.text, q.sort_order, q.category_id,
+              c.\`key\` AS category_key, c.label AS category_label
+       FROM questions q
+       JOIN categories c ON c.id = q.category_id
+       ORDER BY c.id ASC, q.sort_order ASC, q.id ASC`
+    );
+
+    const grouped = [];
+    const indexById = new Map();
+
+    for (const row of rows) {
+      if (!indexById.has(row.category_id)) {
+        indexById.set(row.category_id, grouped.length);
+        grouped.push({
+          id: row.category_id,
+          key: row.category_key,
+          label: row.category_label,
+          questions: [],
+        });
+      }
+      grouped[indexById.get(row.category_id)].questions.push({
+        id: row.id,
+        text: row.text,
+        sort_order: row.sort_order,
+      });
+    }
+
+    return res.json({ categories: grouped });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/assessments', authenticate, async (req, res, next) => {
+  const connection = await pool.getConnection();
+  try {
+    const responses = req.body?.responses;
+
+    if (!Array.isArray(responses) || responses.length === 0) {
+      return res.status(400).json({ message: 'responses must be a non-empty array' });
+    }
+
+    for (const item of responses) {
+      if (
+        !item ||
+        typeof item.question_id !== 'number' ||
+        !Number.isInteger(item.question_id) ||
+        (item.answer !== 0 && item.answer !== 1)
+      ) {
+        return res.status(400).json({
+          message: 'Each response needs question_id (integer) and answer (0 or 1)',
+        });
+      }
+    }
+
+    const questions = await query(
+      `SELECT q.id, q.category_id, c.\`key\` AS category_key, c.label AS category_label
+       FROM questions q
+       JOIN categories c ON c.id = q.category_id`
+    );
+
+    if (questions.length === 0) {
+      return res.status(500).json({ message: 'No questions configured' });
+    }
+
+    const questionIds = new Set(questions.map((q) => q.id));
+    const seen = new Set();
+    for (const item of responses) {
+      if (!questionIds.has(item.question_id)) {
+        return res.status(400).json({ message: `Unknown question_id: ${item.question_id}` });
+      }
+      if (seen.has(item.question_id)) {
+        return res.status(400).json({ message: `Duplicate question_id: ${item.question_id}` });
+      }
+      seen.add(item.question_id);
+    }
+
+    if (seen.size !== questions.length) {
+      return res.status(400).json({
+        message: `All ${questions.length} questions must be answered`,
+      });
+    }
+
+    const responsesByQuestion = new Map(responses.map((r) => [r.question_id, r.answer]));
+    const categories = buildCategoryBreakdown(questions, responsesByQuestion);
+    const totalScore = Math.round(
+      categories.reduce((sum, c) => sum + c.score, 0) / categories.length
+    );
+    const level = scoreToLevel(totalScore);
+
+    await connection.beginTransaction();
+
+    const [assessmentResult] = await connection.execute(
+      `INSERT INTO assessments (user_id, total_score, level)
+       VALUES (?, ?, ?)`,
+      [req.user.id, totalScore, level]
+    );
+    const assessmentId = assessmentResult.insertId;
+
+    for (const item of responses) {
+      await connection.execute(
+        `INSERT INTO responses (assessment_id, question_id, answer)
+         VALUES (?, ?, ?)`,
+        [assessmentId, item.question_id, item.answer]
+      );
+    }
+
+    await connection.commit();
+
+    return res.status(201).json({
+      id: assessmentId,
+      total_score: totalScore,
+      level,
+      categories,
+      created_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    await connection.rollback();
+    return next(err);
+  } finally {
+    connection.release();
+  }
+});
+
+router.get('/assessments', authenticate, async (req, res, next) => {
+  try {
+    const rows = await query(
+      `SELECT id, total_score, level, created_at
+       FROM assessments
+       WHERE user_id = :user_id
+       ORDER BY created_at DESC`,
+      { user_id: req.user.id }
+    );
+
+    return res.json({
+      assessments: rows.map((r) => ({
+        id: r.id,
+        date: r.created_at,
+        score: Number(r.total_score),
+        level: r.level,
+      })),
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.get('/assessments/:id', authenticate, async (req, res, next) => {
+  try {
+    const assessmentId = Number(req.params.id);
+    if (!Number.isInteger(assessmentId) || assessmentId < 1) {
+      return res.status(400).json({ message: 'Invalid assessment id' });
+    }
+
+    const assessments = await query(
+      `SELECT id, user_id, total_score, level, created_at
+       FROM assessments WHERE id = :id LIMIT 1`,
+      { id: assessmentId }
+    );
+
+    if (!assessments.length) {
+      return res.status(404).json({ message: 'Assessment not found' });
+    }
+
+    const assessment = assessments[0];
+    if (assessment.user_id !== req.user.id && req.user.role !== 'advisor') {
+      return res.status(403).json({ message: 'Insufficient permissions' });
+    }
+
+    const responseRows = await query(
+      `SELECT r.question_id, r.answer, q.text AS question_text,
+              q.category_id, c.\`key\` AS category_key, c.label AS category_label
+       FROM responses r
+       JOIN questions q ON q.id = r.question_id
+       JOIN categories c ON c.id = q.category_id
+       WHERE r.assessment_id = :assessment_id
+       ORDER BY c.id ASC, q.sort_order ASC`,
+      { assessment_id: assessmentId }
+    );
+
+    const questions = responseRows.map((r) => ({
+      id: r.question_id,
+      category_id: r.category_id,
+      category_key: r.category_key,
+      category_label: r.category_label,
+    }));
+    const responsesByQuestion = new Map(responseRows.map((r) => [r.question_id, r.answer]));
+    const categories = buildCategoryBreakdown(questions, responsesByQuestion);
+
+    return res.json({
+      id: assessment.id,
+      total_score: Number(assessment.total_score),
+      level: assessment.level,
+      created_at: assessment.created_at,
+      categories,
+      responses: responseRows.map((r) => ({
+        question_id: r.question_id,
+        question: r.question_text,
+        category: r.category_label,
+        answer: r.answer,
+      })),
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+module.exports = router;

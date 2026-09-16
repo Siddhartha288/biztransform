@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@source "./pages/**/*.jsx";
+@source "./components/**/*.jsx";
+@source "./context/**/*.jsx";
+@source "./App.jsx";
+
+@theme {
+  --color-ink: #14141f;
+  --color-surface: #1b1b2c;
+  --color-border: #2a2a42;
+  --color-amber: #f5a623;
+  --color-teal: #4fd1c5;
+  --color-text: #f1f0f5;
+  --color-muted: #9c9bb3;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 10% -10%, rgba(245, 166, 35, 0.12), transparent 50%),
+      radial-gradient(ellipse 60% 40% at 90% 0%, rgba(79, 209, 197, 0.1), transparent 45%),
+      #14141f;
+    color: #f1f0f5;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+}
